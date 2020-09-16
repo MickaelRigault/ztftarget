@@ -15,7 +15,7 @@ python setup.py install
 This assumes that you already have a setup and running `ztfquery` installation and that you have access to the marshal (`from ztfquery import marshal`). 
 
 ```python
-from ztftarget impot target
+from ztftarget import target
 t = target.ZTFTarget.from_name('ZTF20abupbub')
 t.show()
 ```

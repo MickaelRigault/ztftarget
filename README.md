@@ -22,6 +22,11 @@ t.show()
 <p align="left">
   <img src="figures/ZTF20abupbub_target.png" width="800" title="hover text">
 </p>
+if a target has several spectra, these are all shown. See the matching-color top-ticks.
+<p align="left">
+  <img src="figures/ZTF20abwkqxd_target.png" width="790" title="hover text">
+</p>
+
 
 
 A `ZTFTarget` has basic information such as _redshift_ (`t.z` and `t.zerr`), _coordinates_ (`t.radec`) and classification (`t.classification`). When loading the instance with the `from_name()` classmethod these parameters are loaded from your local storage of the marshal sources (`ztfquery.marshal.MarchalAccess.load_local()`).  

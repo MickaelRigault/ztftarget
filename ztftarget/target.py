@@ -161,7 +161,7 @@ class ZTFTarget( object ):
     # -------- #
     #  PLOTTER #
     # -------- #
-    def show(self):
+    def show(self, cmap="viridis"):
         """ """
         import matplotlib.pyplot as mpl
         from astropy import time
@@ -169,16 +169,31 @@ class ZTFTarget( object ):
         fig = mpl.figure(figsize=[9,3])
         axlc = fig.add_axes([0.1,0.175,0.35,0.7])
         axspec = fig.add_axes([0.525,0.175,0.4,0.7])
-    
-        self.lightcurve.show(ax=axlc)
 
-        color_spec = "grey"
-        self.spectra.show(ax=axspec, color=color_spec)
-        axlc.axvline(time.Time(self.spectra.header.get("JD"), format="jd").datetime, 
+        # LightCurve
+        self.lightcurve.show(ax=axlc)
+        
+        # Spectra
+        if not self.has_spectra():
+            axspec.text(0.5,0.5,"No Spectrum", ha="center",va="center")
+            axspec.set_xticks([])
+            axspec.set_yticks([])            
+        else:
+            axspec.set_ylabel("Flux []")
+            axspec.set_xlabel(r"Wavelength [$\AA$]")
+            if self.has_multiple_spectra():
+                colors = mpl.cm.get_cmap("viridis")(np.linspace(0,0.99,len(self.spectra)))
+                axspec.set_ylim(0, np.max([s.data for s in self.spectra])*1.2)
+            else:
+                colors = ["grey"]
+                
+            for i, spec_ in enumerate(np.atleast_1d(self.spectra)):
+                color_spec = colors[i]
+                spec_.show(ax=axspec, color=color_spec)
+                axlc.axvline(time.Time(spec_.header.get("JD"), format="jd").datetime, 
                          ls="-", lw=1, color=color_spec, ymin=0.95,ymax=1, 
                          ms=3, marker="o", markevery=[True, False])
-        axspec.set_ylabel("Flux []")
-        axspec.set_xlabel(r"Wavelength [$\AA$]")
+            
         fig.text(0.02,0.98, self.name, color=mpl.cm.binary(0.7),
                      va="top", ha="left")
         
@@ -231,10 +246,10 @@ class ZTFTarget( object ):
         """ """
         return self._spectra
 
-    def has_spectra():
+    def has_spectra(self):
         """ Test if the lightcurve has been set. """
-        return hasattr(self,"_spectra") and self._spectra is not None
+        return hasattr(self,"_spectra") and self._spectra is not None and len(np.atleast_1d(self.spectra))>0
     
-    def has_multiple_spectra():
+    def has_multiple_spectra(self):
         """ Test if the lightcurve has been set. """
-        return self.has_spectra() and np.atleast_1d(self.spectra)>1
+        return self.has_spectra() and len(np.atleast_1d(self.spectra))>0

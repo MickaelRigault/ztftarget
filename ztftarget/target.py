@@ -147,6 +147,11 @@ class ZTFTarget( object ):
     # -------- #
     #  GETTER  #
     # -------- #
+    def get_irsaquery(self, jdmin, jdmax, avoiding_jd):
+        """ """
+        from ztfquery import ZTFQuery
+        zquery = ZTFQuery
+
     # -------- #
     #  Other   #
     # -------- #

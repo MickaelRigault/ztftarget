@@ -235,3 +235,6 @@ class ZTFTarget( object ):
         """ Test if the lightcurve has been set. """
         return hasattr(self,"_spectra") and self._spectra is not None
     
+    def has_multiple_spectra():
+        """ Test if the lightcurve has been set. """
+        return self.has_spectra() and np.atleast_1d(self.spectra)>1

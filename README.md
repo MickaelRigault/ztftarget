@@ -20,7 +20,7 @@ t = target.ZTFTarget.from_name('ZTF20abupbub')
 t.show()
 ```
 <p align="left">
-  <img src="figures/ZTF20abupbub_target.png" width="350" title="hover text">
+  <img src="figures/ZTF20abupbub_target.png" width="800" title="hover text">
 </p>
 
 

@@ -16,15 +16,17 @@ This assumes that you already have a setup and running `ztfquery` installation a
 
 ```python
 from ztftarget impot target
-t = target.ZTFTarget.from_name('ZTF19acfthre')
+t = target.ZTFTarget.from_name('ZTF20abupbub')
 t.show()
 ```
 <p align="left">
-  <img src="figures/ZTF19acfthre_target.png" width="350" title="hover text">
+  <img src="figures/ZTF20abupbub_target.png" width="350" title="hover text">
 </p>
 
 
-A `ZTFTarget` has basic information such as _redshift_ (`t.z` and `t.zerr`), _coordinates_ (`t.radec`) and classification (`t.classification`). When loading the instance with the `from_name()` classmethod these parameters are loaded from your local storage of the marshal sources (`ztfquery.marshal.MarchalAccess.load_local()`).  In addition `ZTFTarget` has a lightcurve (`t.lightcurve`) and spectra (`t.spectra`).
+A `ZTFTarget` has basic information such as _redshift_ (`t.z` and `t.zerr`), _coordinates_ (`t.radec`) and classification (`t.classification`). When loading the instance with the `from_name()` classmethod these parameters are loaded from your local storage of the marshal sources (`ztfquery.marshal.MarchalAccess.load_local()`).  
+
+In addition `ZTFTarget` has a lightcurve (`t.lightcurve`) and spectra (`t.spectra`). Lightcurve and spectra are downloaded automatically if you do not have them stored locally already.
 
 All have `set`  methods (e.g., `t.set_coordinates(ra, dec)` or `t.set_lightcurve(dataframe)`).
 

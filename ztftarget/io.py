@@ -3,15 +3,17 @@
 
 """ Managing the IO for the module """
 
-import warnings
-from ztfquery import marshal
 
-MARSHALQUERY = marshal.MarshalAccess.load_local("*")
-
-def update_marshal_sources(program="*"):
-    """ update the sources and store them locally ; see marshal.MarshalAccess.store() 
-    = This function is slow. =
-    """
-    MARSHALQUERY.load_target_sources(program)
-    MARSHALQUERY.store()
+def load_marshalquery(program="*"):
+    """ """
+    from ztfquery import marshal
+    global MARSHALQUERY
+    MARSHALQUERY = marshal.MarshalAccess.load_local("*")
+    
+    
+def load_ztf_obslogs(start="2018-03-01", end=None, **kwargs):
+    """ """
+    from ztfquery import skyvision
+    global ZTF_OBSLOGS
+    ZTF_OBSLOGS = skyvision.CompletedLog.from_daterange(start=start, end=end, **kwargs )
     

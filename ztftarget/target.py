@@ -11,8 +11,12 @@ from . import lightcurve
 from . import spectrum
 from . import io
 
+
+
+
 class ZTFTarget( object ):
     """ ZTF Target object """
+    
     def __init__(self, name=None):
         """ Name of the ZTF target """
         self._name = name
@@ -95,9 +99,13 @@ class ZTFTarget( object ):
         """
         if source is not None:
             if source in ["marshal"]:
+                if not hasattr(io,"MARSHALQUERY"):
+                    io.load_marshalquery() # load the global MARSHALQUERY
+                    
                 if not self.name in io.MARSHALQUERY.target_sources["name"].values:
                     warnings.warn(f"Cannot set target information from the marshal, {self.name} is unknown from your local data ; see io.MARSHALQUERY")
                     return None
+                
                 z, zerr = io.MARSHALQUERY.get_target_redshift(self.name).values[0], None
                 radec = io.MARSHALQUERY.get_target_coordinates(self.name).values[0]
                 classification = io.MARSHALQUERY.get_target_classification(self.name).values[0]
@@ -147,11 +155,45 @@ class ZTFTarget( object ):
     # -------- #
     #  GETTER  #
     # -------- #
-    def get_irsaquery(self, jdmin, jdmax, avoiding_jd):
+    def get_live_timerange(self, filters=None, daysprior=10, dayspost=10):
         """ """
-        from ztfquery import ZTFQuery
-        zquery = ZTFQuery
+        return self.lightcurve.get_detection_timerange(filters=filters)["jdobs"].values + [-daysprior,dayspost]
 
+    def get_zquery(self, kind="sci", query_kwargs=False, daysprior=50, dayspost=50, update=True):
+        """ 
+        Parameters
+        ----------
+        query_kwargs: [bool] -optional-
+            If True, this returns the dictionary used as kwargs input for zquery.load_metadata().
+        """
+        if self.radec is None:
+            raise AttributeError("Cannot build the IRSA query since no coordinates loaded (self.radec is None). use self.set_coordinates(ra,dec).")
+
+        jdmin, jdmax = self.get_live_timerange(daysprior=daysprior, dayspost=dayspost)
+        base_query = dict(kind=kind, radec=self.radec, size=0.001, sql_query=f"obsjd BETWEEN {jdmin} and {jdmax}")
+        if query_kwargs:
+            return base_query
+        
+        from ztfquery.query import ZTFQuery
+        zquery = ZTFQuery()
+        zquery.load_metadata(**base_query)
+        if update:
+            self._zquery = zquery
+        return zquery
+        
+    def get_fields(self):
+        """ returns the list of fields containing the target """
+        from ztfquery import fields
+        return fields.get_fields_containing_target(*self.radec)
+    
+    def get_when_observed(self, start=None, end=None, **kwargs):
+        """ """
+        if not hasattr(io, "ZTF_OBSLOGS"):
+            io.load_ztf_obslogs()
+            
+        return io.ZTF_OBSLOGS.get_when_target_observed(self.radec)
+        
+                                          
     # -------- #
     #  Other   #
     # -------- #
@@ -187,7 +229,7 @@ class ZTFTarget( object ):
             axspec.set_ylabel("Flux []")
             axspec.set_xlabel(r"Wavelength [$\AA$]")
             if self.has_multiple_spectra():
-                colors = mpl.cm.get_cmap("viridis")(np.linspace(0,0.99,len(self.spectra)))
+                colors = mpl.cm.get_cmap("viridis")(np.linspace(0,0.99, len(self.spectra)))
                 axspec.set_ylim(0, np.max([s.data for s in self.spectra])*1.2)
             else:
                 colors = ["grey"]
@@ -201,10 +243,11 @@ class ZTFTarget( object ):
             
         fig.text(0.02,0.98, self.name, color=mpl.cm.binary(0.7),
                      va="top", ha="left")
-        
+        return fig
+    
     # ----------------- #
     #   Properties      #
-    # ----------------- #    
+    # ----------------- #
     @property
     def name(self):
         """ ZTF target name """
@@ -213,6 +256,8 @@ class ZTFTarget( object ):
     @property
     def radec(self):
         """ ZTF target RA, Dec """
+        if not hasattr(self,"_ra"):
+            return None
         return self._ra, self._dec
 
     @property
@@ -236,7 +281,7 @@ class ZTFTarget( object ):
             self._classification = None
         return self._classification
 
-    
+    # - LightCurve
     @property
     def lightcurve(self):
         """ ZTF target lightcurve """
@@ -245,7 +290,8 @@ class ZTFTarget( object ):
     def has_lightcurve():
         """ Test if the lightcurve has been set. """
         return hasattr(self,"_lc") and self._lc is not None
-    
+
+    # - Spectra    
     @property
     def spectra(self):
         """ """
@@ -257,4 +303,4 @@ class ZTFTarget( object ):
     
     def has_multiple_spectra(self):
         """ Test if the lightcurve has been set. """
-        return self.has_spectra() and len(np.atleast_1d(self.spectra))>0
+        return self.has_spectra() and len(np.atleast_1d(self.spectra))>1

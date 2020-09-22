@@ -59,40 +59,151 @@ class ZTFLightCurve( object ):
     # -------- #
     #  GETTER  #
     # -------- #
-    def get_first_detection(self, n=1, filter="any", detection=True):
-        """ Get the data entry corresponding to the first n detections"""
-        return self.get_sorted_data(filter=filter, detection=detection, sort_by="jdobs").iloc[:n]
-    
-    def get_latest_detection(self, n=1, filter="any", detection=True):
-        """ Get the data entry corresponding to the latest n detections"""
-        return self.get_sorted_data(filter=filter, detection=detection, sort_by="jdobs").iloc[-n:]
-
-    def get_sorted_data(self, filter="any", detection=True, sort_by="jdobs"):
-        """ Get data entries sorted by the given key"""
-        return self.get_filtered_data(filter=filter, detection=detection).sort_values(sort_by)
-
-    def get_filtered_data(self, filter="any", detection="any"):
-        """ """
-        # Filter
-        if filter is None or (type(filter) is str and filter in ["any","all","*"]):
-            flag_f = np.asarray(np.ones(len(self.data)), dtype=bool)
-        else:
-            flag_f = self.data["filter"].isin(np.atleast_1d(filter))
-    
-        # Detection
-        if type(detection) is str:
-            if detection in ["all","any","*"]:
-                detection is None
-            else:
-                raise ValueError("detection should by 'any' or bool")
-        if detection is None:
-            flag_d = np.asarray(np.ones(len(self.data)), dtype=bool)
-        elif detection:
-            flag_d = ~self.data["mag"].isin([99.00]) 
-        else:
-            flag_d =  self.data["mag"].isin([99.00]) 
+    def get_detection_timerange(self, filters=None, **kwargs):
+        """ Get the first and latest lightcurve data point 
         
-        return self.data[flag_d & flag_f]
+        Parameters
+        ----------
+        filter: [string or list of] -optional-
+            Provide the filter you want to keep.
+            could be:
+                - None: all filters will be considered
+                - filter name (or list of): only the given filter(s) will be used
+
+        **kwargs goes to get_sorted_data() -> get_filtered()
+        
+        Returns
+        -------
+        DataFrame
+        """
+        return self.get_sorted_data(filters=filters, **kwargs).iloc[[0,-1]]
+    
+    
+    def get_first_detection(self, n=1, filters=None, **kwargs):
+        """ Get the data entry corresponding to the first n detections 
+
+        Parameters
+        ----------
+        n: [int] -optional-
+            number of returned entries. 1 means the first, 2 means the first two, etc.
+
+        filter: [string or list of] -optional-
+            Provide the filter you want to keep.
+            could be:
+                - None: all filters will be considered
+                - filter name (or list of): only the given filter(s) will be used
+
+        **kwargs goes to get_sorted_data() -> get_filtered()
+        Returns
+        -------
+        DataFrame
+        """
+        return self.get_sorted_data(filters=filters, sort_by="jdobs", **kwargs).iloc[:n]
+    
+    def get_latest_detection(self, n=1, filters=None, **kwargs):
+        """ Get the data entry corresponding to the latest n detections 
+
+        Parameters
+        ----------
+        n: [int] -optional-
+            number of returned entries. 1 means latest, 2 means the two latest, etc.
+
+        filter: [string or list of] -optional-
+            Provide the filter you want to keep.
+            could be:
+                - None: all filters will be considered
+                - filter name (or list of): only the given filter(s) will be used
+        
+        Returns
+        -------
+        DataFrame
+        """
+        return self.get_sorted_data(filters=filters, sort_by="jdobs", *kwargs).iloc[-n:]
+
+    def get_sorted_data(self, filters=None, detection=True, sort_by="jdobs", **kwargs):
+        """ Get data entries sorted by the given key
+
+        Parameters
+        ----------
+        filters: [string or list of] -optional-
+            Provide the filter you want to keep.
+            could be:
+                - None: all filters will be considered
+                - filter name (or list of): only the given filter(s) will be used
+        
+        detection: [string/bool] -optional-
+            The kind of detection you want to keep:
+            could be:
+                - None: no selection on the detection
+                - True: only detection datapoints
+                - False: only non-detection datapoints.
+
+        sort_by: [string] -optional-
+            column used for sorting the returned dataframe
+            
+        Returns
+        -------
+        DataFrame
+        """
+        return self.get_filtered(filters=filters, detection=detection, **kwargs).sort_values(sort_by)
+
+    def get_filtered(self, filters=None, programid=None, detection=None, **kwargs):
+        """ get a filtered version of the data.
+        
+        Parameters
+        ----------
+        filter: [string or list of] -optional-
+            Provide the filter you want to keep.
+            could be:
+                - None: all filters will be considered
+                - filter name (or list of): only the given filter(s) will be used
+
+        programid: [string or list of] -optional-
+            Provide the programid you want to keep.
+            could be:
+                - None: all programid will be considered
+                - filter name (or list of): only the given programid(s) will be used
+        
+        detection: [string/bool] -optional-
+            The kind of detection you want to keep:
+            could be:
+                - None: no selection on the detection
+                - True: only detection datapoints
+                - False: only non-detection datapoints.
+        
+        **kwargs will behave as filter and programid. provide a column and accepted value(s).
+        Returns
+        -------
+        DataFrame
+        """        
+        filtering = []
+        
+        # Filters
+        if filters is not None:
+            filters = np.atleast_1d(filters)
+            filtering.append("filter in @filters")
+        # ProgramID
+        if programid is not None:
+            programid = np.atleast_1d(programid)
+            filtering.append("programid in @programid")
+
+        # Any            
+        for k,v in kwargs.items():
+            if k not in self.data.columns:
+                warnings.warn(f"unknown columns {k} - ignored.")
+                continue
+            if v is not None:
+                v = np.atleast_1d(v)
+                filtering.append(f"{k} in @v")
+                
+        # Detection                         
+        if detection is not None:
+            filtering.append("absmag < 99" if detection else "absmag == 99")
+
+        # - output
+        if len(filtering)==0:
+            return self.data.copy()
+        return self.data.query(" & ".join(filtering))
     
     # -------- #
     #  PLOTTER #

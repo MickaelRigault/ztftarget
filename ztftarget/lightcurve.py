@@ -227,6 +227,7 @@ class ZTFLightCurve( object ):
             if filter_ not in ZTFCOLOR:
                 print("WARNING: Unknown instrument: %s | magnitude not shown"%filter_)
                 continue
+
             
             jd, mag, magerr = self.data[self.data["filter"].isin([filter_]) & 
                                        ~self.data["mag"].isin([99.00])][

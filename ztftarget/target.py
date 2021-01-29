@@ -12,8 +12,6 @@ from . import spectrum
 from . import io
 
 
-
-
 class ZTFTarget( object ):
     """ ZTF Target object """
     
@@ -181,19 +179,23 @@ class ZTFTarget( object ):
             self._zquery = zquery
         return zquery
         
-    def get_fields(self):
+    def get_fields(self, inclccd=False):
         """ returns the list of fields containing the target """
         from ztfquery import fields
-        return fields.get_fields_containing_target(*self.radec)
-    
+        return fields.get_fields_containing_target(*self.radec, inclccd=inclccd)
+
+    def get_field_ccd_qid(self):
+        """ returns the field:{ccdid, qid, rcid} """
+        from ztfquery import fields
+        return fields.get_field_ccd_qid(*self.radec)
+        
     def get_when_observed(self, start=None, end=None, **kwargs):
         """ """
         if not hasattr(io, "ZTF_OBSLOGS"):
             io.load_ztf_obslogs()
             
         return io.ZTF_OBSLOGS.get_when_target_observed(self.radec)
-        
-                                          
+                          
     # -------- #
     #  Other   #
     # -------- #

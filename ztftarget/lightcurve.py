@@ -5,7 +5,8 @@
 
 import warnings
 import numpy as np
-
+import pandas
+        
 from .config import ZTFCOLOR
 
 class ZTFLightCurve( object ):
@@ -70,7 +71,7 @@ class ZTFLightCurve( object ):
                 - None: all filters will be considered
                 - filter name (or list of): only the given filter(s) will be used
 
-        **kwargs goes to get_sorted_data() -> get_filtered()
+        **kwargs goes to get_sorted_data() -> get_data()
         
         Returns
         -------
@@ -93,7 +94,7 @@ class ZTFLightCurve( object ):
                 - None: all filters will be considered
                 - filter name (or list of): only the given filter(s) will be used
 
-        **kwargs goes to get_sorted_data() -> get_filtered()
+        **kwargs goes to get_sorted_data() -> get_data()
         Returns
         -------
         DataFrame
@@ -145,9 +146,9 @@ class ZTFLightCurve( object ):
         -------
         DataFrame
         """
-        return self.get_filtered(filters=filters, detection=detection, **kwargs).sort_values(sort_by)
+        return self.get_data(filters=filters, detection=detection, **kwargs).sort_values(sort_by)
 
-    def get_filtered(self, filters=None, programid=None, detection=None, **kwargs):
+    def get_data(self, filters=None, programid=None, detection=None, **kwargs):
         """ get a filtered version of the data.
         
         Parameters
@@ -203,8 +204,73 @@ class ZTFLightCurve( object ):
         # - output
         if len(filtering)==0:
             return self.data.copy()
+        
         return self.data.query(" & ".join(filtering))
     
+    def get_filtered(self, filters=None, programid=None, detection=None, **kwargs):
+        """ DEPRECATED, named get_data() now
+        """        
+        return self.get_data(filters=filters, programid=programid, detection=detection, **kwargs)
+
+
+    def get_sncosmo_table(self, filters=["ztf:r","ztf:g","ztf:i"], incl_upperlimit=True, zp=25.0,
+                              as_astropy=False, **kwargs):
+        """ """
+        from . import utils
+        
+        det_data = self.get_data(filters, detection=True, **kwargs)
+        
+        det_fluxes = pandas.DataFrame( utils.get_fluxes(det_data, zp=zp), 
+                                       index=["flux","fluxerr"],
+                                       columns=det_data.index).T
+        
+        if incl_upperlimit:
+            from .utils import get_upper_limit_fluxes            
+            up_data = self.get_data(filters=["ztf:r","ztf:g","ztf:i"],detection=False)
+            upperlimit = pandas.DataFrame( utils.get_upper_limit_fluxes(up_data, zp=zp),
+                                              index=["flux","fluxerr"],
+                                               columns=up_data.index).T
+            fluxes = pandas.concat([upperlimit, det_fluxes],axis=0)
+        else:
+            fluxes = det_fluxes
+
+        # End:
+        alldata = self.get_data(filters, detection=None, **kwargs)
+        fluxes["time"] = alldata["jdobs"].loc[fluxes.index]
+        fluxes["band"] = alldata["filter"].loc[fluxes.index]
+        fluxes["zp"]   = zp
+        fluxes["zpsys"]= "ab"
+        if as_astropy:
+            from astropy import table
+            fluxes = table.Table.from_pandas(fluxes)
+        return fluxes
+
+
+    def fit_salt(self, incl_upperlimit=True, 
+             fixed=None, values=None, bounds=None,
+             filterprop={},
+             **kwargs):
+        """ 
+        Returns
+        -------
+        (result, fitted_model), datatable
+        """
+        from ztftarget import salt
+        import sncosmo
+    
+        model = salt.get_saltmodel()
+        if fixed is None:
+            fixed = {}
+        if values is None:
+            values = {}
+        
+        model.set(**{**values,**fixed})
+        parameters = [p_ for p_ in ['z','t0', 'x0', 'x1', 'c'] if p_ not in fixed]
+    
+        table_ = self.get_sncosmo_table(incl_upperlimit=incl_upperlimit, as_astropy=True, **filterprop)
+        return sncosmo.fit_lc(table_, model, 
+                              parameters,  # parameters of model to vary
+                              bounds=bounds), table_
     # -------- #
     #  PLOTTER #
     # -------- #

@@ -62,14 +62,14 @@ def flux_to_mag(flux, dflux, units="zp", zp=25.0, wavelength=None):
     return -2.5 * np.log10(flux * wavelength ** 2) + zp, np.abs(err)
 
 
-def get_upper_limit_fluxes(dataframe, units="zp", zp=25.0):
+def get_upper_limit_fluxes(dataframe, units="zp", zp=25.0, upmagkey="upmag"):
     """ """
     if units != "zp":
         raise NotImplementedError("only units=zp implemented.")
         
     error = (
         mag_to_flux(
-            np.asarray(dataframe["upmag"]),
+            np.asarray(dataframe[upmagkey]),
             None,
             units=units,
             zp=zp,
@@ -79,9 +79,9 @@ def get_upper_limit_fluxes(dataframe, units="zp", zp=25.0):
     return flux, error
 
 
-def get_fluxes(dataframe, units="zp", zp=25.0):
+def get_fluxes(dataframe, units="zp", zp=25.0, magkey="mag", magerrkey="mag.err"):
     """ """
     if units != "zp":
         raise NotImplementedError("only units=zp implemented.")
         
-    return mag_to_flux(dataframe["mag"], dataframe["mag.err"], units=units, zp=zp)        
+    return mag_to_flux(dataframe[magkey], dataframe[magerrkey], units=units, zp=zp)        

@@ -1,308 +1,638 @@
 #! /usr/bin/env python
 #
 
-""" ZTF Target Lightcurve tools """
+""" ZTF Target based on fritz """
 
-
-import numpy as np
 import pandas
+import numpy as np
+import  warnings
 
-from . import lightcurve
-from . import spectrum
-from . import io
+from ztfquery import fritz
+from astropy import time
 
-
-class ZTFTarget( object ):
-    """ ZTF Target object """
-    
-    def __init__(self, name=None):
-        """ Name of the ZTF target """
-        self._name = name
-        
-    @classmethod
-    def from_name(cls, name, lc_source="marshal", spectral_source="marshal", setup_source="marshal"):
-        """ Load ZTF data given the name.
-        
-        Parameters
-        ----------
-        name: [string]
-            Name of the ZTF target
-
-        lc_source: [string] -optional-
-            The source of the lightcurve
-            available:
-                - marshal
-
-        spectral_source: [string] -optional-
-            The source of the spectra
-            available:
-                - marshal
-
-        setup_source: [string] -optional-
-            Set the target information (redshift, coordinates and classification) from the given source
-            available:
-                - marshal
+class FritzTarget( object ):
+    def __init__(self, name=None, 
+                 lightcurve=None, spectra=None, 
+                 source=None, alerts=None):
+        """ """
+        if name is not None:
+            self.set_name(name)
             
-        Returns
-        -------
-        ZTFTarget
-        """
-        this = cls(name)
-        if lc_source is not None:
-            this.set_lightcurve( lightcurve.ZTFLightCurve.from_name(this.name, source=lc_source) )
+        if lightcurve is not None:
+            self.set_lightcurve(lightcurve)
             
-        if spectral_source is not None:
-            this.set_spectra( spectrum.ZTFSpectrum.from_name(this.name, source=spectral_source) )
-            
-        if setup_source is not None:
-            this.setup(source=setup_source)
-            
-        return this
-    
-    # ----------------- #
-    #   Methods         #
-    # ----------------- #
-    # -------- #
-    #  LOADER  #
-    # -------- #
-    def setup(self, source=None, z=None, zerr=None, radec=None, classification=None):
-        """ This sets the target information (redshift, coordinates, classification).
-        They could come from a source
+        if spectra is not None:
+            self.set_spectra(spectra)
 
-        Parameters
-        ----------
-        source: [string] -optional-
-            Set the target information (redshift, coordinates and classification) from this source.
-            = If not None, all the other parameters are ignored =
-            available:
-                - marshal
-
-        // Only if source=None //
-        z, zerr: [float] -optional-
-            target redshift and its error. Any could be None.
-
-        radec: [2d array] -optional-
-            RA and Dec in degree (like radec=[210.7736, 54.2736])
-
-        classification: [string] -optional-
-            Classification type of the transient, like 'SNIa'
-        
-        Returns
-        -------
-        Void
-
-        Example:
-        --------
-        self.setup(source='marshal')
-        """
         if source is not None:
-            if source in ["marshal"]:
-                if not hasattr(io,"MARSHALQUERY"):
-                    io.load_marshalquery() # load the global MARSHALQUERY
-                    
-                if not self.name in io.MARSHALQUERY.target_sources["name"].values:
-                    warnings.warn(f"Cannot set target information from the marshal, {self.name} is unknown from your local data ; see io.MARSHALQUERY")
-                    return None
-                
-                z, zerr = io.MARSHALQUERY.get_target_redshift(self.name).values[0], None
-                radec = io.MARSHALQUERY.get_target_coordinates(self.name).values[0]
-                classification = io.MARSHALQUERY.get_target_classification(self.name).values[0]
-            else:
-                raise NotImplementedError(f"source {source} has not been implemented.")
+            self.set_source(source)
+
+        if alerts is not None:
+            self.set_alerts(alerts)
+
+    @classmethod
+    def from_name(cls, targetname, warn=False, store=True, force_dl=False, 
+                  incl_source=True, incl_lightcurve=True, incl_spectra=True, incl_alerts=True, 
+                  **kwargs):
+        """ """
+        prop = {**dict(store=store, force_dl=force_dl), **kwargs}
+        if incl_lightcurve:
+            lightcurve = fritz.FritzPhotometry.from_name(targetname, **prop)
+        else:
+            lightcurve=None
             
-        self.set_redshift(z, zerr=zerr)
-        self.set_coordinates( *radec )
-        self.set_classification( classification )
+        if incl_spectra:
+            spectra = fritz.FritzSpectrum.from_name(targetname, warn=warn, **prop)
+        else:
+            spectra=None            
+            
+        if incl_source:
+            source = fritz.FritzSource.from_name(targetname, **prop)
+        else:
+            source=None
+            
+        if incl_alerts:
+            alerts = fritz.FritzAlerts.from_name(targetname, **prop)
+        else:
+            alerts=None
         
-    # -------- #
-    #  SETTER  #
-    # -------- #
-    def set_redshift(self, z, zerr=None):
-        """ Redshift of the target """
-        self._z = z
-        self._zerr = zerr
+        return cls(name=targetname, 
+                   lightcurve=lightcurve, spectra=spectra, 
+                    source=source, alerts=alerts)
+    
+    def store(self, **kwargs):
+        """ calls the individual lightcurve and spectra store methods. """
+        
+        if self.has_lightcurve():
+            self.lightcurve.store(**kwargs)
+            
+        if self.has_source():
+            self.source.store(**kwargs)
+            
+        if self.has_spectra():
+            self._call_down_spectra_("store", isfunc=True)
 
-    def set_coordinates(self, ra, dec):
-        """ RA and Dec of the target """
-        self._ra, self._dec  = ra, dec
+        if self.has_alerts():
+            self.alerts.store(**kwargs)
 
-    def set_classification(self, classification):
-        """ classification (type) of the target (e.g. SNIa) """
-        self._classification = classification
+    # ============= #
+    #   Methods     #
+    # ============= #
+    def set_name(self, targetname):
+        """ """
+        self._name = targetname
         
     def set_lightcurve(self, lightcurve):
-        """ Provide the target lightcurve 
-        
-        Parameters
-        ----------
-        lightcurve: [dataframe or ZTFLightCurve]
-            If you provide a dataframe, it will be converted into a ZTFLightCurve.
-            
-        Returns
-        -------
-        Void
-        """
-        if type(lightcurve) == pandas.DataFrame:
-            lightcurve = ZTFLightCurve(lightcurve, self.name)
-        self._lc = lightcurve
+        """ """
+        self._lightcurve = lightcurve
         
     def set_spectra(self, spectra):
         """ """
-        self._spectra = spectra
+        self._spectra = np.atleast_1d(spectra)
         
-    # -------- #
-    #  GETTER  #
-    # -------- #
-    def get_live_timerange(self, filters=None, daysprior=10, dayspost=10):
+    def set_source(self, source):
         """ """
-        return self.lightcurve.get_detection_timerange(filters=filters)["jdobs"].values + [-daysprior,dayspost]
-
-    def get_zquery(self, kind="sci", query_kwargs=False, daysprior=50, dayspost=50, update=True):
-        """ 
+        self._source = source
+        
+    def set_alerts(self, alerts):
+        """ """
+        self._alerts = alerts
+        
+    # - derived
+    def set_saltresult(self, saltresult, add_residuals=True):
+        """ """
+        self._saltresult = saltresult
+        if add_residuals:
+            self._derive_saltresiduals_()
+            
+        
+    
+    # ------- #
+    # GETTER  #
+    # ------- #
+    #
+    # - Redshift
+    def get_redshift(self, full=False, **kwargs):
+        """ """
+        if not self.has_source():
+            raise AttributeError("No source set.")
+        return self.source.get_redshift(full=full, **kwargs)
+    
+    #
+    # - Classification
+    def get_classification(self, full=False, **kwargs):
+        """ """
+        if not self.has_source():
+            raise AttributeError("No source set.")
+            
+        return self.source.get_classification(full=full, **kwargs)
+        
+    #
+    # - Coordinates
+    def get_coordinates(self, full=False, perband=False, filters="*", clearna=True, usestat='mean', **kwargs):
+        """ shortcut to self.lightcurve.get_coordinates()
+        (see also self.alerts.get_coordinates() or self.source.get_coordinates())
+        
         Parameters
         ----------
-        query_kwargs: [bool] -optional-
-            If True, this returns the dictionary used as kwargs input for zquery.load_metadata().
+        clearna: [bool] -optional-
+            If the returned coordinates is not a simple Serie, shall this remove the NaN rows ?
         """
-        if self.radec is None:
-            raise AttributeError("Cannot build the IRSA query since no coordinates loaded (self.radec is None). use self.set_coordinates(ra,dec).")
-
-        jdmin, jdmax = self.get_live_timerange(daysprior=daysprior, dayspost=dayspost)
-        base_query = dict(kind=kind, radec=self.radec, size=0.001, sql_query=f"obsjd BETWEEN {jdmin} and {jdmax}")
-        if query_kwargs:
-            return base_query
-        
-        from ztfquery.query import ZTFQuery
-        zquery = ZTFQuery()
-        zquery.load_metadata(**base_query)
-        if update:
-            self._zquery = zquery
-        return zquery
-        
-    def get_fields(self, inclccd=False):
-        """ returns the list of fields containing the target """
-        from ztfquery import fields
-        return fields.get_fields_containing_target(*self.radec, inclccd=inclccd)
-
-    def get_field_ccd_qid(self):
-        """ returns the field:{ccdid, qid, rcid} """
-        from ztfquery import fields
-        return fields.get_field_ccd_qid(*self.radec)
-        
-    def get_when_observed(self, start=None, end=None, **kwargs):
-        """ """
-        if not hasattr(io, "ZTF_OBSLOGS"):
-            io.load_ztf_obslogs()
+        if not self.has_lightcurve():
+            raise AttributeError("No lightcurve set, maybe see self.source.get_coordiantes()")
             
-        return io.ZTF_OBSLOGS.get_when_target_observed(self.radec)
-                          
-    # -------- #
-    #  Other   #
-    # -------- #
-    def view_on_marshal(self):
-        """ opens your browser at the corresponding target marshal page"""
-        if self.name is None:
-            raise AttributeError("self.name is not set. Cannot launch target Marshal page.")
-        
-        import webbrowser
-        return webbrowser.open(f'http://skipper.caltech.edu:8080/cgi-bin/growth/view_source.cgi?name={self.name}', new=2)
-        
-    # -------- #
-    #  PLOTTER #
-    # -------- #
-    def show(self, cmap="viridis"):
-        """ """
-        import matplotlib.pyplot as mpl
-        from astropy import time
-        
-        fig = mpl.figure(figsize=[9,3])
-        axlc = fig.add_axes([0.1,0.175,0.35,0.7])
-        axspec = fig.add_axes([0.525,0.175,0.4,0.7])
-
-        # LightCurve
-        self.lightcurve.show(ax=axlc)
-        
-        # Spectra
-        if not self.has_spectra():
-            axspec.text(0.5,0.5,"No Spectrum", ha="center",va="center")
-            axspec.set_xticks([])
-            axspec.set_yticks([])            
-        else:
-            axspec.set_ylabel("Flux []")
-            axspec.set_xlabel(r"Wavelength [$\AA$]")
-            if self.has_multiple_spectra():
-                colors = mpl.cm.get_cmap("viridis")(np.linspace(0,0.99, len(self.spectra)))
-                axspec.set_ylim(0, np.max([s.data for s in self.spectra])*1.2)
-            else:
-                colors = ["grey"]
-                
-            for i, spec_ in enumerate(np.atleast_1d(self.spectra)):
-                color_spec = colors[i]
-                spec_.show(ax=axspec, color=color_spec)
-                axlc.axvline(time.Time(spec_.header.get("JD"), format="jd").datetime, 
-                         ls="-", lw=1, color=color_spec, ymin=0.95,ymax=1, 
-                         ms=3, marker="o", markevery=[True, False])
+        cdata = self.lightcurve.get_coordinates(full=full, perband=perband, filters=filters, 
+                                                method=usestat, **kwargs)
+        if clearna and type(cdata) == pandas.DataFrame:
+            return cdata[~cdata.isna().all(axis=1)]
+        return cdata
             
-        fig.text(0.02,0.98, self.name, color=mpl.cm.binary(0.7),
-                     va="top", ha="left")
-        return fig
+    #
+    # - ccd location        
+    def get_ccdpos(self, full=False, perband=False, groupby='field', usestat='mean', **kwargs):
+        """ shortcut to self.alerts.get_ccdpos()
+        
+        Parameters
+        ----------
+        clearna: [bool] -optional-
+            If the returned coordinates is not a simple Serie, shall this remove the NaN rows ?
+        """
+        if not self.has_alerts():
+            raise AttributeError("No alerts set.")
+            
+        return self.alerts.get_ccdpos(full=full, perband=perband, groupby=groupby, 
+                                           usestat=usestat, **kwargs)
     
-    # ----------------- #
-    #   Properties      #
-    # ----------------- #
+    #
+    # - Lightcurves
+    def get_lcdata(self, detected=None, filters='*', time_range=None, query=None):
+        """ similar to self.lightcurve.get_data() but apply to lcdata (that may incl saltresiduals)"""
+        if query is None:
+            query = []
+        else:
+            query = list(np.atleast_1d(query))
+            
+        # - Detected Filtering
+        if detected is not None:
+            if not detected:
+                query.append("mag == 'NaN'") 
+            else:
+                query.append("mag != 'NaN'")
+
+        # - Filters Filtering
+        if filters is not None and filters not in ["*","all","any"]:
+            filters = list(np.atleast_1d(filters))
+            query.append("filter == @filters")
+            
+        # - Time Filtering
+        if time_range is not None:
+            tstart, tend = time_range
+            if tstart is None and tend is None:
+                pass
+            else:
+                tindex = pandas.DatetimeIndex(time.Time(self.lcdata["mjd"], format="mjd").datetime)
+                
+                if tstart is None:
+                    query.append(f"@tindex<'{tend}'")
+                elif tend is None:
+                    query.append(f"'{tstart}'<@tindex")
+                else:
+                    query.append(f"'{tstart}'<@tindex<'{tend}'")
+                    
+        # - Returns
+        if len(query)==0:
+            return self.lcdata.copy()
+        return self.lcdata.query(" and ".join(query))
+    
+    def get_sncosmo_table(self, filters=["ztfr","ztfg","ztfi"], incl_upperlimit=True, zp=25.0,
+                              as_astropy=False, **kwargs):
+        """ get the lightcurve data in a format sncosmo understands for fitting the lightcurve.
+        (used bu fit_salt) """
+        from . import utils
+        
+        det_data = self.get_lcdata(filters=filters, detected=True, **kwargs)
+        
+        det_fluxes = pandas.DataFrame( utils.get_fluxes(det_data, zp=zp, magkey="mag", magerrkey="magerr"), 
+                                       index=["flux","fluxerr"],
+                                       columns=det_data.index).T
+        
+        if incl_upperlimit:
+            up_data = self.get_lcdata(filters=filters,detected=False)
+            upperlimit = pandas.DataFrame( utils.get_upper_limit_fluxes(up_data, zp=zp, upmagkey="limiting_mag"),
+                                              index=["flux","fluxerr"],
+                                               columns=up_data.index).T
+            fluxes = pandas.concat([upperlimit, det_fluxes],axis=0)
+        else:
+            fluxes = det_fluxes
+
+        # End:
+        alldata = self.get_lcdata(filters=filters, detected=None, **kwargs)
+        fluxes["time"] = alldata["mjd"].loc[fluxes.index]
+        fluxes["band"] = alldata["filter"].loc[fluxes.index]
+        fluxes["zp"]   = zp
+        fluxes["zpsys"]= "ab"
+        if as_astropy:
+            from astropy import table
+            fluxes = table.Table.from_pandas(fluxes)
+        return fluxes
+
+    # ----------- #
+    #  Extra      #
+    # ----------- #
+    def fit_salt(self, incl_upperlimit=True, 
+                 fix_redshift=True,
+                 fixed=None, values=None, bounds=None,
+                 filterprop={}, get_object=True,
+                 set_it=True,
+                 **kwargs):
+        """ 
+        Returns
+        -------
+        (result, fitted_model), datatable
+        """
+        from . import salt
+        import sncosmo
+                
+        model = salt.get_saltmodel()
+        if fixed is None:
+            fixed = {}
+        if values is None:
+            values = {}
+            
+        if fix_redshift:
+            z = self.get_redshift()
+            fixed["z"] = z
+        
+        model.set(**{**values,**fixed})
+        parameters = [p_ for p_ in ['z','t0', 'x0', 'x1', 'c'] if p_ not in fixed]
+    
+        table_ = self.get_sncosmo_table(incl_upperlimit=incl_upperlimit, as_astropy=True, **filterprop)
+        
+        #
+        # - Fit LightCurve
+        (result, fitted_model)= sncosmo.fit_lc(table_, model, 
+                                               parameters,  # parameters of model to vary
+                                               bounds=bounds)
+        saltres = salt.SALTResult(result=result, model=fitted_model, data=table_)
+        #
+        # - Output
+        if set_it:
+            self.set_saltresult(saltres)
+
+        if not get_object:
+            return (result, fitted_model), table_
+
+        return saltres
+        
+    # ----------- #
+    #  Plot       #
+    # ----------- #
+    def show_lightcurve(self, axes=None, incl_salt=True, influx=True,
+                        show_model=True, show_header=False, 
+                        ulength=0.1, ualpha=0.1, ylimmag=21.8,
+                        fig=None,as_phase=False, lcprop={},
+                        **kwargs):
+        """ 
+        
+        Parameters
+        ----------
+        lcprop: [dict] -optional-
+            used as kwargs for get_lcdata()
+            
+        """
+        ZTFCOLOR = { # ZTF
+            "ztfr":dict(marker="o",ms=7,  mfc="C3"),
+            "ztfg":dict(marker="o",ms=7,  mfc="C2"),
+            "ztfi":dict(marker="o",ms=7, mfc="C1")
+                }
+
+        
+        if not self.has_lightcurve():
+            raise AttributeError("No lightcurve set.")
+            
+        if not incl_salt or not self.has_saltresult():
+            return self.lightcurve.show(**kwargs)
+        
+        
+        import matplotlib.pyplot as mpl
+        from matplotlib import dates as mdates
+        from astropy.time import Time
+    
+        #
+        # - Axes
+        if axes is not None:
+            if len(np.atleast_1d(axes))==1:
+                ax = np.atleast_1d(axes)[0]
+                bottom_ax = ax
+                axres = {"ztfg":None, "ztfr":None, "ztfi":None}
+            elif len(axes) == 4:            
+                resg, resr, resi, ax = axes
+                axres = {"ztfg":resg, "ztfr":resr, "ztfi":resi}
+                bottom_ax = axres["ztfg"]
+            else:
+                raise ValueError("axes if given must be a single axes or a list of 4 axes [resg, resr, resi, main]")
+            fig = ax.figure
+            
+        else:
+            if fig is None:
+                fig = mpl.figure(figsize=[7,5])
+        
+            left, bottom, width, heigth, resheigth = 0.15,0.1,0.75,0.55, 0.07
+            vspan, extra_vspan=0.02, 0
+            ax = fig.add_axes([left, bottom+3*(resheigth+vspan)+extra_vspan, width, heigth])
+            axres = {'ztfg': fig.add_axes([left, bottom+0*(resheigth+vspan), width, resheigth]),
+                     'ztfr': fig.add_axes([left, bottom+1*(resheigth+vspan), width, resheigth]),
+                     'ztfi': fig.add_axes([left, bottom+2*(resheigth+vspan), width, resheigth])}
+            
+        
+            bottom_ax = axres["ztfg"]
+
+        allaxes = [axres["ztfg"], axres["ztfr"], axres["ztfi"], ax]
+        # - Axes
+        #
+
+        # 
+        # - Data
+        lightcurves = self.get_lcdata(**lcprop)
+        bands = np.unique(lightcurves["filter"])
+        modeltime, modelbands = self.saltresult.get_lightcurve(bands, as_phase=as_phase, as_dataframe=False,
+                                                              influx=influx)
+
+        if not as_phase:
+            modeltime=Time(modeltime, format="mjd").datetime
+            
+        # - Data
+        #
+
+        #
+        # - Properties
+        base_prop = dict(ls="None", mec="0.9", mew=0.5, ecolor="0.7")
+        lineprop = dict(color="0.7", zorder=1, lw=0.5)
+        # - Properties
+        #
+        
+        #
+        # - Plots
+        for band_ in bands:
+            if band_ not in ZTFCOLOR:
+                warnings.warn(f"WARNING: Unknown instrument: {band_} | magnitude not shown")
+                continue
+            
+            bdata = lightcurves[lightcurves["filter"]==band_]
+            if not as_phase:
+                datatime = Time(bdata["mjd"], format="mjd").datetime
+            else:
+                datatime = bdata["phase"]
+
+            # = In Magnitude                
+            if not influx:
+                flag_notdet = bdata["detection"].isna()
+                y, dy = bdata["mag"], bdata["magerr"]
+                # detected
+                ax.errorbar(datatime[~flag_notdet],
+                         y[~flag_notdet],  yerr= dy[~flag_notdet], 
+                         label=band_, 
+                         **{**base_prop,**ZTFCOLOR[band_]}
+                       )
+                                    
+            # = In Flux
+            else:
+                y, dy = bdata["flux"], bdata["fluxerr"]
+                ax.errorbar(datatime,
+                         y,  yerr= dy, 
+                         label=band_, 
+                         **{**base_prop,**ZTFCOLOR[band_]}
+                       )
+                
+            # - Residual in sigma
+            if axres[band_] is not None:
+                axres[band_].plot(datatime, 
+                                bdata["fluxres"]/bdata["fluxerr"],
+                                    marker="o", ls="None", 
+                                ms=ZTFCOLOR[band_]["ms"]/2, 
+                                mfc=ZTFCOLOR[band_]["mfc"],
+                                mec="0.5"
+                           )
+            # = Models
+            if show_model:
+                ax.plot(modeltime, modelbands[band_], color=ZTFCOLOR[band_]["mfc"])
+
+        if not influx:
+            ax.invert_yaxis()
+
+            # = upperlimit
+            for band_ in bands:
+                if band_ not in ZTFCOLOR:
+                    warnings.warn(f"WARNING: Unknown instrument: {band_} | magnitude not shown")
+                    continue
+            
+                bdata = lightcurves[lightcurves["filter"]==band_]
+                if not as_phase:
+                    datatime = Time(bdata["mjd"], format="mjd").datetime
+                else:
+                    datatime = bdata["phase"]
+
+                flag_notdet = bdata["detection"].isna()
+                upmag = bdata["limiting_mag"]
+                ax.errorbar(datatime[flag_notdet], upmag[flag_notdet],
+                                 yerr=ulength, lolims=True, alpha=ualpha,
+                                 color=ZTFCOLOR[band_]["mfc"], 
+                                 ls="None",  label="_no_legend_")
+
+        # - Plots        
+        #
+        
+        for k_, ax_  in axres.items():
+            if ax_ is None:
+                continue
+            if k_ not in bands:
+                ax_.text(0.5,0.5, f"No {k_} data", va="center", ha="center", transform=ax_.transAxes, 
+                        color=ZTFCOLOR[k_]["mfc"])
+                ax_.set_yticks([])
+                ax_.set_xticks([])
+            else:
+                ax_.set_xlim(*ax.get_xlim())
+                ax_.set_ylim(-8,8)
+                ax_.axhline(0, **lineprop)
+                ax_.axhspan(-2,2, color=ZTFCOLOR[k_]["mfc"], zorder=2, alpha=0.05)
+                ax_.axhspan(-5,5, color=ZTFCOLOR[k_]["mfc"], zorder=2, alpha=0.05)            
+
+            clearwhich = ["left","right","top"] # "bottom"
+            [ax_.spines[which].set_visible(False) for which in clearwhich]
+            ax_.tick_params(axis="y", labelsize="small", 
+                           labelcolor="0.7", color="0.7")
+        # Upper Limits       
+
+        #ax.invert_yaxis()  
+
+        # Data locator
+        if not as_phase:
+            locator = mdates.AutoDateLocator()
+            formatter = mdates.ConciseDateFormatter(locator)
+            bottom_ax.xaxis.set_major_locator(locator)
+            bottom_ax.xaxis.set_major_formatter(formatter)
+        else:
+            bottom_ax.set_xlabel("phase [days]")
+
+        if influx:
+            ax.set_ylabel("flux")
+            ax.axhline(0, **lineprop)
+        else:
+            ax.set_ylabel("mag")
+            ax.set_ylim(ylimmag)
+
+        [ax_.set_xlim(*ax.get_xlim()) for ax_ in axres.values() if ax_ is not None]
+        [ax_.xaxis.set_ticklabels([]) for ax_ in allaxes if ax_ != bottom_ax and ax_ is not None]
+
+        if show_header:
+            ax.set_title(targetname, loc="left", fontsize="medium")
+        
+            s_ = self.saltresults.get_target_parameters(targetname)
+            label = f"x1={s_['x1']:.2f}±{s_['x1_err']:.2f}"
+            label+= f" | c={s_['c']:.2f}±{s_['c_err']:.2f}"
+            ax.text(1,1, label, va="bottom", ha="right", fontsize="small", color="0.7", 
+                        transform=ax.transAxes)
+
+        #
+        # - Align
+        
+        #
+        #
+        return ax, axres
+        
+        
+        
+    # ============= #
+    #  Internal     #
+    # ============= #
+    def _call_down_spectra_(self, what, isfunc, *args, **kwargs):
+        """ """
+        if not isfunc:
+            return [getattr(s_,what) for s_ in self.spectra]
+        return [getattr(s_,what)(*args, **kwargs) for s_ in self.spectra]
+    
+    def _build_lcdata_(self, keys=["ra","dec", "mjd", "filter", "mag","magerr","magsys","limiting_mag"]):
+        """ """
+        from . import utils
+        lcdata = self.lightcurve.get_data()[keys]
+        detected_flux = lcdata[~lcdata["mag"].isna()]
+        flux,fluxerr = utils.mag_to_flux(*detected_flux[["mag","magerr"]].values.T)
+        fdf = pandas.DataFrame(np.asarray([flux,fluxerr, flux/fluxerr]).T, 
+                               index=detected_flux.index, 
+                               columns=["flux","fluxerr", "detection"])
+        
+        
+        self._lcdata = pandas.merge(lcdata, fdf, left_index=True, right_index=True, how="outer")
+
+        
+    def _build_specdata_(self, keys=["obj_id", "mjd"]):
+        """ """
+        self._specdata = pandas.DataFrame([self._call_down_spectra_(k, isfunc=False) for k in keys],
+                 index=keys).T
+
+    def _derive_saltresiduals_(self):
+        """ """
+        if self.has_lightcurve():
+            self.lcdata["phase"] = self.saltresult.get_phase(self.lcdata["mjd"])
+
+            bands = self.lcdata[["mjd","filter"]]
+            model = self.saltresult.get_lightcurve(bands["filter"], jd=bands["mjd"], as_phase=True, as_dataframe=True)
+            for filter_ in bands["filter"].unique():
+                b_index = self.lcdata.index[self.lcdata["filter"]==filter_]
+                self.lcdata.loc[b_index, "fluxres"] = self.lcdata.loc[b_index, "flux"]-model.loc[b_index][filter_]
+        if self.has_spectra():
+            self.specdata["phase"] = self.saltresult.get_phase(self.specdata["mjd"])
+            
+    # ============= #
+    #  Properties   #
+    # ============= #
     @property
     def name(self):
-        """ ZTF target name """
+        """ """
         return self._name
     
     @property
-    def radec(self):
-        """ ZTF target RA, Dec """
-        if not hasattr(self,"_ra"):
-            return None
-        return self._ra, self._dec
-
-    @property
-    def z(self):
-        """ redshift (and error) of the target """
-        if not hasattr(self,"_z"):
-            self._z = None
-        return self._z
-
-    @property
-    def zerr(self):
-        """ redshift (and error) of the target """
-        if not hasattr(self,"_zerr"):
-            self._zerr = None
-        return self._zerr
-
-    @property
-    def classification(self):
-        """ target classification """
-        if not hasattr(self,"_classification"):
-            self._classification = None
-        return self._classification
-
-    # - LightCurve
-    @property
     def lightcurve(self):
-        """ ZTF target lightcurve """
-        return self._lc
-
-    def has_lightcurve():
-        """ Test if the lightcurve has been set. """
-        return hasattr(self,"_lc") and self._lc is not None
-
-    # - Spectra    
+        """ """
+        if not hasattr(self,"_lightcurve"):
+            return None
+        return self._lightcurve
+    
+    def has_lightcurve(self):
+        """ """
+        return self.lightcurve is not None
+    
+    @property
+    def lcdata(self):
+        """ """
+        if not hasattr(self, "_lcdata"):
+            if not self.has_lightcurve():
+                return None
+            self._build_lcdata_()
+            
+        return self._lcdata
+    
+    @property
+    def source(self):
+        """ """
+        if not hasattr(self,"_source"):
+            return None
+        return self._source
+    
+    def has_source(self):
+        """ """
+        return self.source is not None
+    
     @property
     def spectra(self):
         """ """
+        if not hasattr(self,"_spectra"):
+            return None
         return self._spectra
-
-    def has_spectra(self):
-        """ Test if the lightcurve has been set. """
-        return hasattr(self,"_spectra") and self._spectra is not None and len(np.atleast_1d(self.spectra))>0
     
-    def has_multiple_spectra(self):
-        """ Test if the lightcurve has been set. """
-        return self.has_spectra() and len(np.atleast_1d(self.spectra))>1
+    def has_spectra(self):
+        """ """
+        return self.spectra is not None
+    
+    @property
+    def specdata(self):
+        """ """
+        if not hasattr(self, "_specdata"):
+            if not self.has_spectra():
+                return None
+            self._build_specdata_()
+            
+        return self._specdata
+        
+    
+    @property
+    def nspectra(self):
+        """ """
+        if not self.has_spectra():
+            return 0
+        return len(self.spectra)
+    
+    @property
+    def alerts(self):
+        """ """
+        if not hasattr(self,"_alerts"):
+            return None
+        return self._alerts
+    
+    def has_alerts(self):
+        """ """
+        return self.alerts is not None
+    
+    # - Derived
+    @property
+    def saltresult(self):
+        """ """
+        if not hasattr(self, "_saltresult"):
+            return None
+        return self._saltresult
+    
+    def has_saltresult(self):
+        """ """
+        return self.saltresult is not None
+    
+

@@ -243,8 +243,8 @@ class ZTFLightCurve( object ):
         if as_astropy:
             from astropy import table
             fluxes = table.Table.from_pandas(fluxes)
+            
         return fluxes
-
 
     def fit_salt(self, incl_upperlimit=True, 
              fixed=None, values=None, bounds=None,

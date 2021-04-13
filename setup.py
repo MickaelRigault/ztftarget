@@ -10,8 +10,8 @@ MAINTAINER = "Mickael Rigault"
 MAINTAINER_EMAIL = "m.rigault@ipnl.in2p3.fr"
 URL = "https://github.com/MickaelRigault/ztftarget/"
 LICENSE = "Apache 2.0"
-DOWNLOAD_URL = "https://github.com/MickaelRigault/ztftarget/tarball/0.2"
-VERSION = "0.2.0"
+DOWNLOAD_URL = "https://github.com/MickaelRigault/ztftarget/tarball/0.3"
+VERSION = "0.3.0"
 
 try:
     from setuptools import setup, find_packages

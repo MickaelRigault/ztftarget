@@ -11,7 +11,7 @@ cd ztftarget
 python setup.py install
 ```
 
-# Usage
+# Usage (OUTDATED)
 This assumes that you already have a setup and running `ztfquery` installation and that you have access to the marshal (`from ztfquery import marshal`). 
 
 ```python

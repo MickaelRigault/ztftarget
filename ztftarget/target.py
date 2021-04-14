@@ -231,7 +231,8 @@ class FritzTarget( object ):
             return self.lcdata.copy()
         return self.lcdata.query(" and ".join(query))
     
-    def get_sncosmo_table(self, filters=["ztfr","ztfg","ztfi"], incl_upperlimit=True, zp=25.0,
+    def get_sncosmo_table(self, filters=["ztfr","ztfg","ztfi"],
+                              incl_upperlimit=True, zp=25.0,
                               as_astropy=False, **kwargs):
         """ get the lightcurve data in a format sncosmo understands for fitting the lightcurve.
         (used bu fit_salt) """
@@ -239,13 +240,15 @@ class FritzTarget( object ):
         
         det_data = self.get_lcdata(filters=filters, detected=True, **kwargs)
         
-        det_fluxes = pandas.DataFrame( utils.get_fluxes(det_data, zp=zp, magkey="mag", magerrkey="magerr"), 
+        det_fluxes = pandas.DataFrame( utils.get_fluxes(det_data, zp=zp, magkey="mag",
+                                                            magerrkey="magerr"), 
                                        index=["flux","fluxerr"],
                                        columns=det_data.index).T
         
         if incl_upperlimit:
             up_data = self.get_lcdata(filters=filters,detected=False)
-            upperlimit = pandas.DataFrame( utils.get_upper_limit_fluxes(up_data, zp=zp, upmagkey="limiting_mag"),
+            upperlimit = pandas.DataFrame( utils.get_upper_limit_fluxes(up_data, zp=zp,
+                                                                        upmagkey="limiting_mag"),
                                               index=["flux","fluxerr"],
                                                columns=up_data.index).T
             fluxes = pandas.concat([upperlimit, det_fluxes],axis=0)
@@ -266,13 +269,56 @@ class FritzTarget( object ):
     # ----------- #
     #  Extra      #
     # ----------- #
-    def fit_salt(self, incl_upperlimit=True, 
+    def fit_salt(self, incl_upperlimit=True, filterprop={},
+                 force_color=None, force_x1=None,
+                 force_t0=None, force_redshift=None,
                  fix_redshift=True,
                  fixed=None, values=None, bounds=None,
-                 filterprop={}, get_object=True,
+                 get_object=True,
                  set_it=True,
                  **kwargs):
         """ 
+        Parameters
+        ----------
+
+        // data options
+
+        incl_upperlimit: [bool] -optional-
+            Shall the upper limit be used when fitting salt ?
+
+        filterprop: [dict or None] -optional-
+            kwargs option for get_sncosmo_table() and then get_lcdata()
+            
+        // fit options
+
+        force_redshift, force_color, force_x1, force_t0: [float or None] -optional-
+            Force the redshift, color, stretch (x1) or time of peak (t0) values.
+            None, means not forced.
+            These options overwrite the fixed dictionary entries
+            = force_t0 is in mjd =
+
+        fix_redshift: [bool] -optional-
+            shortcut to force_redshift to the target redshift value (see self.redshift).
+
+        fixed: [dict or None] -optional-
+            fix values of the model. Format: e.g. fixed = {'x1':2, 'c':0.1}
+
+        values: [dict or None] -optional-
+            provide initial guess values, Format: e.g. values = {'x1':2, 'c':0.1}
+
+        bounds: [dict or None] -optional-
+            provide boundaries for each values. Format: e.g. bounds = {'x1':[-3,3], 'c':[-1,3]}
+
+        // returns options
+
+        get_object: [bool] -optional-
+            should this method returns the saltresult object or the raw sncomos output ?
+
+        set_it: [bool] -optional-
+            if the fit is successful should it be set to this instance ? 
+
+        **kwargs goes to sncosmo.fit_lc()
+            
         Returns
         -------
         (result, fitted_model), datatable
@@ -286,10 +332,19 @@ class FritzTarget( object ):
         if values is None:
             values = {}
             
-        if fix_redshift:
-            z = self.get_redshift()
+        if fix_redshift or force_redshift is not None:
+            z = self.get_redshift() if force_redshift is None else float(force_redshift)
             fixed["z"] = z
-        
+
+        if force_color is not None:
+            fixed["c"] = float(force_color)
+            
+        if force_x1:
+            fixed["x1"] = float(force_x1)
+            
+        if force_t0:
+            fixed["t0"] = float(force_t0)
+            
         model.set(**{**values,**fixed})
         parameters = [p_ for p_ in ['z','t0', 'x0', 'x1', 'c'] if p_ not in fixed]
     
@@ -299,7 +354,7 @@ class FritzTarget( object ):
         # - Fit LightCurve
         (result, fitted_model)= sncosmo.fit_lc(table_, model, 
                                                parameters,  # parameters of model to vary
-                                               bounds=bounds)
+                                               bounds=bounds, **kwargs)
         saltres = salt.SALTResult(result=result, model=fitted_model, data=table_)
         #
         # - Output

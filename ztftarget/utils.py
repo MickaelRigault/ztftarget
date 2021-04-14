@@ -85,3 +85,25 @@ def get_fluxes(dataframe, units="zp", zp=25.0, magkey="mag", magerrkey="mag.err"
         raise NotImplementedError("only units=zp implemented.")
         
     return mag_to_flux(dataframe[magkey], dataframe[magerrkey], units=units, zp=zp)        
+
+
+
+def read_lines(lines):
+    """ """
+    import warnings
+    DICTLINES = {"ha":6562, "hb":4861, "hg":4340, "hd":4101}
+    linesout = []
+    for l in np.atleast_1d(lines).tolist():
+        if type(l) is str or type(l) in [np.str_,np.str]:
+            if l in DICTLINES:
+                linesout.append(DICTLINES[l])
+            else:
+                try:
+                    linesout.append(float(l))
+                except:
+                    warnings.warn(f"cannot parse line {l} ; ignored")
+                    continue
+        else:
+            linesout.append(float(l))
+
+    return linesout

@@ -45,7 +45,7 @@ class Spectrum(  fritz.FritzSpectrum ):
         specfiles = squery.get_target_spectra(name, extension=".fits", force_dl=force_dl,
                                                   show_progress=show_progress, **kwargs)
         
-        if len(specfiles)==0:
+        if specfiles is None or len(specfiles)==0:
             warnings.warn(f"no spectra on pharos for {name}")
             return None
         

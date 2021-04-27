@@ -16,7 +16,8 @@ from . import photometry
 class Target( object ):
     def __init__(self, name=None, 
                  lightcurve=None, spectra=None, 
-                 source=None, alerts=None):
+                 source=None, alerts=None,
+                     load_mwebv=True):
         """ """
         if name is not None:
             self.set_name(name)
@@ -33,17 +34,22 @@ class Target( object ):
         if alerts is not None:
             self.set_alerts(alerts)
 
+        if load_mwebv:
+            self.load_mwebv()
+            
     @classmethod
     def from_name(cls, targetname, warn=False, store=True, force_dl=False, 
                   incl_source=True, incl_lightcurve=True, incl_spectra=True, incl_alerts=True,
-                  spec_source=["fritz", "sedm"],
+                  spec_source=["fritz", "sedm"], lc_source=["fritz","marshal"],
+                  load_mwebv=True,
                   **kwargs):
         """ """
         prop = {**dict(store=store, force_dl=force_dl), **kwargs}
         if incl_lightcurve:
-            lightcurve = photometry.Lightcurve.from_name(targetname, warn=warn, **prop)
+            lightcurve = photometry.Lightcurve.from_name(targetname, warn=warn, source=lc_source, **prop)
         else:
             lightcurve=None
+            load_mwebv = False
             
         if incl_spectra and spec_source is not None and len(spec_source)>0:
             spectra = spectroscopy.Spectrum.from_name(targetname, warn=warn,
@@ -63,7 +69,7 @@ class Target( object ):
         
         return cls(name=targetname, 
                    lightcurve=lightcurve, spectra=spectra, 
-                    source=source, alerts=alerts)
+                    source=source, alerts=alerts, load_mwebv=load_mwebv)
     
     def store(self, **kwargs):
         """ calls the individual lightcurve and spectra store methods. """
@@ -126,15 +132,26 @@ class Target( object ):
         if pass_down and self.has_lightcurve():
             self.lightcurve.set_mwebv(mw_ebv)
             
-        
+    # ------- #
+    # LOAD    #
+    # ------- #
+    def load_mwebv(self, sourcemap="sfd"):
+        """ """
+        from .utils import get_mwebv
+        mwebv = get_mwebv(*self.get_coordinates(), sourcemap=sourcemap)
+        self.set_mwebv(mwebv)
+
     # ------- #
     # GETTER  #
     # ------- #
     #
     # - Extinction
-    def get_mwebv(self):
+    def get_mwebv(self, source=None):
         """ Get the Milky Way extinction in the target direction """
-        return self._mwebv
+        if source is None or source in ["stored", "self"]:
+            return self.mwebv
+        from .utils import get_mwebv
+        return get_mwebv(*self.get_coordinates(), sourcemap=source)
     
     #
     # - Redshift
@@ -190,7 +207,8 @@ class Target( object ):
             If the returned coordinates is not a simple Serie, shall this remove the NaN rows ?
         """
         if not self.has_lightcurve():
-            raise AttributeError("No lightcurve set, maybe see self.source.get_coordiantes()")
+            warnings.warn("No lightcurve set, maybe see self.source.get_coordiantes()")
+            return None
             
         cdata = self.lightcurve.get_coordinates(full=full, perband=perband, filters=filters, 
                                                 method=usestat, **kwargs)
@@ -536,6 +554,11 @@ class Target( object ):
     @property
     def mwebv(self):
         """ milky way extinction in the target direction """
-        if not hasattr(self, "_mwebv"):
-            return None
+        if not hasattr(self, "_mwebv") or self._mwebv is None:
+            coord = self.get_coordinates()
+            if coord is not None:
+                self.load_mwebv()
+            else:
+                self._mwebv = None
+                
         return self._mwebv

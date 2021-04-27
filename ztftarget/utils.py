@@ -1,6 +1,57 @@
 import numpy as np
 
 
+def get_dustmap(sourcemap, useweb=False):
+    """ get the dustmap (from the dustmaps package) of the given source.
+
+    Parameters
+    ---------
+    sourcemap: [string]
+        origin of the MW extinction information. 
+        currently implemented: planck, sfd
+        
+    useweb: [bool] -optional-
+        shall this query from the web 
+        = only implemented for sfd, ignored otherwise =
+        
+    Returns
+    -------
+    dustmaps.Dustmap
+    """
+    if sourcemap.lower() == "sfd":
+        from dustmaps import sfd
+        return sfd.SFDQuery() if not useweb else sfd.SFDWebQuery()
+    
+    if sourcemap.lower() == "planck":
+        from dustmaps import planck
+        return planck.PlanckQuery()
+    
+    raise NotImplementedError(f"Only Planck and SFD maps implemented. {sourcemap} given.")
+
+def get_mwebv(ra, dec, sourcemap="sfd"):
+    """ get the Milky Way E(B-V) at the given coordinates
+    
+    Parameters
+    ----------
+    ra, dec: [float or list of]
+        RA and Dec (in deg) ; could be lists
+
+    sourcemap: [string] -optional-
+        origin of the MW extinction information. 
+        (see get_dustmap) e.g.:
+        - planck or sfd
+
+    Returns
+    -------
+    float (or list following the ra, dec input)
+    """    
+    from astropy.coordinates import SkyCoord
+    coords = SkyCoord(ra, dec, unit="deg")
+    return get_dustmap(sourcemap)(coords)
+
+
+    
+
 def mag_to_flux(mag, magerr=None, units="zp", zp=25.0, wavelength=None):
     """converts magnitude into flux
     Parameters

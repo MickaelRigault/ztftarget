@@ -6,17 +6,15 @@ from ztfquery import filters
 filters.load_p48_filters_to_sncosmo(basename="ztf")
 
 
-def get_saltmodel( mwebv=None, mwrv=None):
+def get_saltmodel( mwebv=None):
     """ """
     import sncosmo
-    dust = sncosmo.CCM89Dust()
+    dust = sncosmo.F99Dust()
     model =  sncosmo.Model("salt2", effects=[dust],
                        effect_names=['mw'],
                        effect_frames=['obs'])
     if mwebv is not None:
         model.set(mwebv=mwebv)
-    if mwrv is not None:
-        model.set(mwr_v=mwrv)
         
     return model
 

@@ -110,7 +110,7 @@ class Lightcurve(  fritz.FritzPhotometry ):
     
     def get_sncosmo_table(self, filters=["ztfr","ztfg","ztfi"],
                               incl_upperlimit=True, zp=25.0,
-                              as_astropy=False, **kwargs):
+                              as_astropy=False, dropna=True, **kwargs):
         """ get the lightcurve data in a format sncosmo understands for fitting the lightcurve.
         (used bu fit_salt) """
         from . import utils
@@ -138,6 +138,9 @@ class Lightcurve(  fritz.FritzPhotometry ):
         fluxes["band"] = alldata["filter"].loc[fluxes.index]
         fluxes["zp"]   = zp
         fluxes["zpsys"]= "ab"
+
+        if dropna:
+            fluxes = fluxes.dropna()
         if as_astropy:
             from astropy import table
             fluxes = table.Table.from_pandas(fluxes)

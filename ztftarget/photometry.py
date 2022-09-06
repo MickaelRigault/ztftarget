@@ -9,6 +9,8 @@ from astropy import time
 from ztfquery import fritz, marshal
 
 
+
+
 class Lightcurve(  fritz.FritzPhotometry ):
         
     @classmethod
@@ -288,21 +290,27 @@ class Lightcurve(  fritz.FritzPhotometry ):
             used as kwargs for get_lcdata()
             
         """
-        ZTFCOLOR = { # ZTF
-            "ztfr":dict(marker="o",ms=7,  mfc="C3"),
-            "ztfg":dict(marker="o",ms=7,  mfc="C2"),
-            "ztfi":dict(marker="o",ms=7, mfc="C1")
-                }
-
+        from .filters import FILTER_PLTFORMAT
         
         if not incl_salt or not self.has_saltresult():
             return super().show(**kwargs)
-        
-        
-        import matplotlib.pyplot as mpl
+
+        # So this include salt.
         from matplotlib import dates as mdates
         from astropy.time import Time
-    
+
+
+        
+        # - Data
+        #  data first to known  who many bands
+        lightcurves = self.get_lcdata(**lcprop)
+        
+        data_filters = lightcurves["filter"].unique()
+        sncosmo_filters = self.sncosmo_filters # filters from data & known by sncosmo
+        #  In case some where cutted out because of selection in get_lcdata():
+        #  limit to the one actually in the current lightcurve data
+        sncosmo_filters = np.asarray(sncosmo_bands)[np.in1d(sncosmo_filters, data_filters)]
+        
         #
         # - Axes
         if axes is not None:
@@ -320,7 +328,8 @@ class Lightcurve(  fritz.FritzPhotometry ):
             
         else:
             if fig is None:
-                fig = mpl.figure(figsize=[7,5])
+                import matplotlib.pyplot as plt
+                fig = plt.figure(figsize=[7,5])
         
             left, bottom, width, heigth, resheigth = 0.15,0.1,0.75,0.55, 0.07
             vspan, extra_vspan=0.02, 0
@@ -337,8 +346,6 @@ class Lightcurve(  fritz.FritzPhotometry ):
         #
 
         # 
-        # - Data
-        lightcurves = self.get_lcdata(**lcprop)
         bands = np.unique(lightcurves["filter"])
         modeltime, modelbands = self.saltresult.get_lightcurve(bands, as_phase=as_phase,
                                                                 as_dataframe=False,
@@ -360,8 +367,8 @@ class Lightcurve(  fritz.FritzPhotometry ):
         #
         # - Plots
         for band_ in bands:
-            if band_ not in ZTFCOLOR:
-                warnings.warn(f"WARNING: Unknown instrument: {band_} | magnitude not shown")
+            if band_ not in FILTER_PLTFORMAT:
+                warnings.warn(f"Plotting issue: unknown instrument: {band_} | magnitude not shown")
                 continue
             
             bdata = lightcurves[lightcurves["filter"]==band_]

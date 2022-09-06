@@ -14,13 +14,23 @@ _NAME_ADAPT = {"p48":"ztf",
               "ioo":"lt"
              }
 
-FILTER_PLTFORMAT = { # ZTF
-            "ztfr":dict(marker="o", ms=7, mfc="C3"),
-            "ztfg":dict(marker="o", ms=7, mfc="C2"),
-            "ztfi":dict(marker="o", ms=7, mfc="C1")
+FILTER_PLTFORMAT = {
+            # ZTF
+            "ztfr":dict(marker="o", ms=7, mfc="tab:red"),
+            "ztfg":dict(marker="o", ms=7, mfc="tab:green"),
+            "ztfi":dict(marker="o", ms=7, mfc="tab:orange"),
+            # SEDm
+            "sedmu":dict(marker="s", ms=6, mfc="tab:purple"),            
+            "sedmg":dict(marker="s", ms=6, mfc="darkgreen"),
+            "sedmr":dict(marker="s", ms=6, mfc="darkred"),
+            "sedmi":dict(marker="s", ms=6, mfc="darkorange"),            
+            # LT
+            "ioog":dict(marker="d", ms=6, mfc="yellowgreen"),
+            "ioor":dict(marker="d", ms=6, mfc="tomato"),
+            "iooi":dict(marker="d", ms=6, mfc="goldenrod"),
+            "iooz":dict(marker="d", ms=6, mfc="tab:grey"), 
+            
             }
-
-
 
     
 def load_instruments_filters_to_sncosmo(instruments, **kwargs):

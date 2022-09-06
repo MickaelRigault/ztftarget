@@ -257,7 +257,7 @@ class Lightcurve(  fritz.FritzPhotometry ):
         table_ = self.get_sncosmo_table(filters=filters,
                                         incl_upperlimit=incl_upperlimit, as_astropy=True,
                                             **filterprop)
-        
+        print(table_)
         #
         # - Fit LightCurve
         (result, fitted_model)= sncosmo.fit_lc(table_, model, 
@@ -277,7 +277,8 @@ class Lightcurve(  fritz.FritzPhotometry ):
     # --------- #
     #  Data     #
     # --------- #
-    def show(self, axes=None, incl_salt=True, influx=True,
+    def show(self, filters=None,
+                 axes=None, incl_salt=True, influx=True,
                  show_model=True, show_header=False, 
                  ulength=0.1, ualpha=0.1, ylimmag=21.8,
                  fig=None,as_phase=False, lcprop={},
@@ -300,17 +301,18 @@ class Lightcurve(  fritz.FritzPhotometry ):
         from astropy.time import Time
 
 
-        
+        if filters is None:
+            filters = self.sncosmo_filters
         # - Data
         #  data first to known  who many bands
-        lightcurves = self.get_lcdata(**lcprop)
+        lightcurves = self.get_lcdata(filters=filters, **lcprop)
         
         data_filters = lightcurves["filter"].unique()
         sncosmo_filters = self.sncosmo_filters # filters from data & known by sncosmo
         #  In case some where cutted out because of selection in get_lcdata():
         #  limit to the one actually in the current lightcurve data
-        sncosmo_filters = np.asarray(sncosmo_bands)[np.in1d(sncosmo_filters, data_filters)]
-        
+        sncosmo_filters = np.asarray(sncosmo_filters)[np.in1d(sncosmo_filters, data_filters)]
+        nfilters = len(sncosmo_filters)
         #
         # - Axes
         if axes is not None:
@@ -329,19 +331,24 @@ class Lightcurve(  fritz.FritzPhotometry ):
         else:
             if fig is None:
                 import matplotlib.pyplot as plt
-                fig = plt.figure(figsize=[7,5])
-        
-            left, bottom, width, heigth, resheigth = 0.15,0.1,0.75,0.55, 0.25
-            vspan, extra_vspan=0.02, 0
-            ax = fig.add_axes([left, bottom+3*(resheigth+vspan)+extra_vspan, width, heigth])
-            axres = {'ztfg': fig.add_axes([left, bottom+0*(resheigth+vspan), width, resheigth]),
-                     'ztfr': fig.add_axes([left, bottom+1*(resheigth+vspan), width, resheigth]),
-                     'ztfi': fig.add_axes([left, bottom+2*(resheigth+vspan), width, resheigth])}
+                fig = plt.figure(figsize=[10,4+nfilters])
+                
+            ratio = 4/(4+nfilters)
+            print(ratio)
+            left, bottom, width, heigth, resheigth_tot = 0.15, 0.1, 0.75, ratio, 0.9-ratio
+            vspan_tot = resheigth_tot*0.1 # 10%
+            resheigth = resheigth_tot*0.9/nfilters # 10%
+            vspan = (vspan_tot / (nfilters-1)) if nfilters >1 else vspan_tot
+            extra_vspan = 0.01
+            # per line
             
-        
-            bottom_ax = axres["ztfg"]
+            ax = fig.add_axes([left, bottom+resheigth_tot+extra_vspan, width, heigth])
+            axres = {f: fig.add_axes([left, bottom+i*(resheigth+vspan), width, resheigth])
+                         for i,f in enumerate(sncosmo_filters)}
+            
+            bottom_ax = axres[sncosmo_filters[0]]
 
-        allaxes = [axres["ztfg"], axres["ztfr"], axres["ztfi"], ax]
+        allaxes = list(axres.values()) + [ax]
         # - Axes
         #
 
@@ -385,7 +392,7 @@ class Lightcurve(  fritz.FritzPhotometry ):
                 ax.errorbar(datatime[~flag_notdet],
                          y[~flag_notdet],  yerr= dy[~flag_notdet], 
                          label=band_, 
-                         **{**base_prop,**ZTFCOLOR[band_]}
+                         **{**base_prop,**FILTER_PLTFORMAT[band_]}
                        )
                                     
             # = In Flux
@@ -394,28 +401,30 @@ class Lightcurve(  fritz.FritzPhotometry ):
                 ax.errorbar(datatime,
                          y,  yerr= dy, 
                          label=band_, 
-                         **{**base_prop,**ZTFCOLOR[band_]}
+                         **{**base_prop,**FILTER_PLTFORMAT[band_]}
                        )
                 
             # - Residual in sigma
             if axres[band_] is not None:
+                color = FILTER_PLTFORMAT[band_]["mfc"]
                 axres[band_].plot(datatime, 
                                 bdata["fluxres"]/bdata["fluxerr"],
                                     marker="o", ls="None", 
-                                ms=ZTFCOLOR[band_]["ms"]/2, 
-                                mfc=ZTFCOLOR[band_]["mfc"],
+                                ms=FILTER_PLTFORMAT[band_]["ms"]/1.2, 
+                                mfc=color,
                                 mec="0.5"
                            )
+                axres[band_].set_ylabel(band_, fontsize="medium", color=color)
             # = Models
             if show_model:
-                ax.plot(modeltime, modelbands[band_], color=ZTFCOLOR[band_]["mfc"])
+                ax.plot(modeltime, modelbands[band_], color=FILTER_PLTFORMAT[band_]["mfc"])
 
         if not influx:
             ax.invert_yaxis()
 
             # = upperlimit
             for band_ in bands:
-                if band_ not in ZTFCOLOR:
+                if band_ not in FILTER_PLTFORMAT:
                     warnings.warn(f"WARNING: Unknown instrument: {band_} | magnitude not shown")
                     continue
             
@@ -429,7 +438,7 @@ class Lightcurve(  fritz.FritzPhotometry ):
                 upmag = bdata["limiting_mag"]
                 ax.errorbar(datatime[flag_notdet], upmag[flag_notdet],
                                  yerr=ulength, lolims=True, alpha=ualpha,
-                                 color=ZTFCOLOR[band_]["mfc"], 
+                                 color=FILTER_PLTFORMAT[band_]["mfc"], 
                                  ls="None",  label="_no_legend_")
 
         # - Plots        
@@ -441,15 +450,19 @@ class Lightcurve(  fritz.FritzPhotometry ):
             if k_ not in bands:
                 ax_.text(0.5,0.5, f"No {k_} data", va="center", ha="center",
                              transform=ax_.transAxes, 
-                        color=ZTFCOLOR[k_]["mfc"])
+                        color=FILTER_PLTFORMAT[k_]["mfc"])
                 ax_.set_yticks([])
                 ax_.set_xticks([])
             else:
                 ax_.set_xlim(*ax.get_xlim())
                 ax_.set_ylim(-8,8)
                 ax_.axhline(0, **lineprop)
-                ax_.axhspan(-2,2, color=ZTFCOLOR[k_]["mfc"], zorder=2, alpha=0.05)
-                ax_.axhspan(-5,5, color=ZTFCOLOR[k_]["mfc"], zorder=2, alpha=0.05)            
+                if k_ in FILTER_PLTFORMAT:
+                    color = FILTER_PLTFORMAT[k_]["mfc"]
+                else:
+                    color = "0.7"
+                ax_.axhspan(-2,2, color=color, zorder=2, alpha=0.05)
+                ax_.axhspan(-5,5, color=color, zorder=2, alpha=0.05)            
 
             clearwhich = ["left","right","top"] # "bottom"
             [ax_.spines[which].set_visible(False) for which in clearwhich]
@@ -469,22 +482,21 @@ class Lightcurve(  fritz.FritzPhotometry ):
             bottom_ax.set_xlabel("phase [days]")
 
         if influx:
-            ax.set_ylabel("flux")
+            ax.set_ylabel("flux", fontsize="large")
             ax.axhline(0, **lineprop)
         else:
-            ax.set_ylabel("mag")
+            ax.set_ylabel("mag", fontsize="large")
             ax.set_ylim(ylimmag)
 
         [ax_.set_xlim(*ax.get_xlim()) for ax_ in axres.values() if ax_ is not None]
         [ax_.xaxis.set_ticklabels([]) for ax_ in allaxes if ax_ != bottom_ax and ax_ is not None]
 
         if show_header:
-            ax.set_title(targetname, loc="left", fontsize="medium")
-        
-            s_ = self.saltresults.get_target_parameters(targetname)
+            ax.set_title(self.name, loc="left", fontsize="medium")
+            s_ = self.saltresult.get_parameters()
             label = f"x1={s_['x1']:.2f}±{s_['x1_err']:.2f}"
             label+= f" | c={s_['c']:.2f}±{s_['c_err']:.2f}"
-            ax.text(1,1, label, va="bottom", ha="right", fontsize="small", color="0.7", 
+            ax.text(1,1, label, va="bottom", ha="right", fontsize="small", color="k", 
                         transform=ax.transAxes)
 
         #
@@ -516,14 +528,17 @@ class Lightcurve(  fritz.FritzPhotometry ):
 
     def _derive_saltresiduals_(self):
         """ """
+        
         self.lcdata["phase"] = self.saltresult.get_phase(self.lcdata["mjd"])
+        self.lcdata["fluxres"] = np.NaN # Nan by default, filling what I can.
 
-        bands = self.lcdata[["mjd","filter"]]
+        lcdata_ = self.lcdata[self.lcdata["filter"].isin(self.sncosmo_filters)]
+        bands = lcdata_[["mjd","filter"]]
         model = self.saltresult.get_lightcurve(bands["filter"], jd=bands["mjd"],
                                                    as_phase=True, as_dataframe=True)
         for filter_ in bands["filter"].unique():
-            b_index = self.lcdata.index[self.lcdata["filter"]==filter_]
-            self.lcdata.loc[b_index, "fluxres"] = self.lcdata.loc[b_index, "flux"]-model.loc[b_index][filter_]
+            b_index = self.lcdata.index[lcdata_["filter"]==filter_]
+            self.lcdata.loc[b_index, "fluxres"] =  lcdata_.loc[b_index, "flux"]-model.loc[b_index][filter_]
 
     # ============= #
     #  Internal     #

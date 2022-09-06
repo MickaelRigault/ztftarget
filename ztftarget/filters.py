@@ -14,10 +14,10 @@ _NAME_ADAPT = {"p48":"ztf",
               "ioo":"lt"
              }
 
-ZTFCOLOR = { # ZTF
-            "ztfr":dict(marker="o",ms=7,  mfc="C3"),
-            "ztfg":dict(marker="o",ms=7,  mfc="C2"),
-            "ztfi":dict(marker="o",ms=7, mfc="C1")
+FILTER_PLTFORMAT = { # ZTF
+            "ztfr":dict(marker="o", ms=7, mfc="C3"),
+            "ztfg":dict(marker="o", ms=7, mfc="C2"),
+            "ztfi":dict(marker="o", ms=7, mfc="C1")
             }
 
 

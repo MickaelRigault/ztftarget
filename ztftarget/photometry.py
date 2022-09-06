@@ -331,7 +331,7 @@ class Lightcurve(  fritz.FritzPhotometry ):
                 import matplotlib.pyplot as plt
                 fig = plt.figure(figsize=[7,5])
         
-            left, bottom, width, heigth, resheigth = 0.15,0.1,0.75,0.55, 0.07
+            left, bottom, width, heigth, resheigth = 0.15,0.1,0.75,0.55, 0.25
             vspan, extra_vspan=0.02, 0
             ax = fig.add_axes([left, bottom+3*(resheigth+vspan)+extra_vspan, width, heigth])
             axres = {'ztfg': fig.add_axes([left, bottom+0*(resheigth+vspan), width, resheigth]),

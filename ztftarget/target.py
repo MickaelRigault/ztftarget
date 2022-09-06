@@ -269,14 +269,16 @@ class Target( object ):
     # ----------- #
     #  Extra      #
     # ----------- #
-    def fit_salt(self, incl_upperlimit=True, filterprop={},
-                 force_color=None, force_x1=None,
-                 force_t0=None, force_redshift=None,
-                 fix_redshift=True,
-                 fixed=None, values=None, bounds=None,
-                 get_object=True,
-                 set_it=True,
-                 **kwargs):
+    def fit_salt(self, incl_upperlimit=True,
+                     filters=['ztfr', 'ztfg', 'ztfi'],
+                     filterprop={},
+                     force_color=None, force_x1=None,
+                     force_t0=None, force_redshift=None,
+                    fix_redshift=True,
+                    fixed=None, values=None, bounds=None,
+                    get_object=True,
+                    set_it=True,
+                    **kwargs):
         """ 
         Parameters
         ----------
@@ -326,7 +328,8 @@ class Target( object ):
         if fix_redshift:
             force_redshift = self.get_redshift()
             
-        output = self.lightcurve.fit_salt(incl_upperlimit=incl_upperlimit, filterprop=filterprop,
+        output = self.lightcurve.fit_salt(filters=filters,
+                                              incl_upperlimit=incl_upperlimit, filterprop=filterprop,
                                             force_color=force_color, force_x1=force_x1,
                                             force_t0=force_t0, force_redshift=force_redshift,
                                             fixed=fixed, values=values, bounds=bounds,

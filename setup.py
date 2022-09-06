@@ -10,8 +10,8 @@ MAINTAINER = "Mickael Rigault"
 MAINTAINER_EMAIL = "m.rigault@ipnl.in2p3.fr"
 URL = "https://github.com/MickaelRigault/ztftarget/"
 LICENSE = "Apache 2.0"
-DOWNLOAD_URL = "https://github.com/MickaelRigault/ztftarget/tarball/0.3"
-VERSION = "0.3.3"
+DOWNLOAD_URL = "https://github.com/MickaelRigault/ztftarget/tarball/0.4"
+VERSION = "0.4.0"
 
 try:
     from setuptools import setup, find_packages
@@ -69,7 +69,7 @@ if __name__ == "__main__":
         scripts=[],
         packages=packages,
         include_package_data=True,
-        # package_data={'ztftarget': ['data/*.*']},
+        package_data={'ztftarget': ['data/*','data/filters/*' ]},
         classifiers=[
             "Intended Audience :: Science/Research",
             "Programming Language :: Python :: 2.7",

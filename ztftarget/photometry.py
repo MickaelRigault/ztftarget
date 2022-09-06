@@ -10,7 +10,7 @@ from ztfquery import fritz, marshal
 
 
 class Lightcurve(  fritz.FritzPhotometry ):
-
+        
     @classmethod
     def from_name(cls, name, force_dl=False, warn=True, store=True, source=["fritz","marshal"], 
                   avoid_duplicate=True,  **kwargs):
@@ -58,6 +58,13 @@ class Lightcurve(  fritz.FritzPhotometry ):
     # ============= #
     #  Methods      #
     # ============= #
+    def load_intruments_to_sncosmo(self):
+        """ """
+        from .filters import load_instruments_filters_to_sncosmo
+        instruments = self.get_instruments()
+        self._sncosmo_instruments = load_instruments_filters_to_sncosmo(instruments)
+
+    
     def set_mwebv(self, mw_ebv):
         """ Set the Milky Way extinction E(B-V)"""
         self._mwebv = float(mw_ebv)
@@ -68,7 +75,9 @@ class Lightcurve(  fritz.FritzPhotometry ):
         if add_residuals:
             self._derive_saltresiduals_()
             
-    def get_lcdata(self, detected=None, filters='*', time_range=None, query=None):
+    def get_lcdata(self, detected=None,
+                       filters='*', instruments="*",
+                       time_range=None, query=None):
         """ similar to self.get_data() but apply to lcdata 
         (that may incl saltresiduals) """
         if query is None:
@@ -86,7 +95,11 @@ class Lightcurve(  fritz.FritzPhotometry ):
         # - Filters Filtering
         if filters is not None and filters not in ["*","all","any"]:
             filters = list(np.atleast_1d(filters))
-            query.append("filter == @filters")
+            query.append(f"filter in {filters}")
+
+        if instruments is not None and instruments not in ["*","all","any"]:
+            instruments = list(np.atleast_1d(instruments))
+            query.append(f"instrument_name in {instruments}")
             
         # - Time Filtering
         if time_range is not None:
@@ -107,15 +120,23 @@ class Lightcurve(  fritz.FritzPhotometry ):
         if len(query)==0:
             return self.lcdata.copy()
         return self.lcdata.query(" and ".join(query))
-    
-    def get_sncosmo_table(self, filters=["ztfr","ztfg","ztfi"],
+        
+    def get_sncosmo_table(self, filters=None,
+                              instruments="*",
                               incl_upperlimit=True, zp=25.0,
                               as_astropy=False, dropna=True, **kwargs):
         """ get the lightcurve data in a format sncosmo understands for fitting the lightcurve.
         (used bu fit_salt) """
         from . import utils
+
+        if filters is None:
+            filters = self.sncosmo_filters
+            warnings.warn(f"filters are not specified. Only these (known by sncosmo) will be used {filters}")
+            
         
-        det_data = self.get_lcdata(filters=filters, detected=True, **kwargs)
+        lcprop = {**dict(filters=filters, instruments=instruments),**kwargs}
+        
+        det_data = self.get_lcdata(detected=True, **lcprop)
         
         det_fluxes = pandas.DataFrame( utils.get_fluxes(det_data, zp=zp, magkey="mag",
                                                             magerrkey="magerr"), 
@@ -123,7 +144,7 @@ class Lightcurve(  fritz.FritzPhotometry ):
                                        columns=det_data.index).T
         
         if incl_upperlimit:
-            up_data = self.get_lcdata(filters=filters,detected=False)
+            up_data = self.get_lcdata(detected=False, **lcprop)
             upperlimit = pandas.DataFrame( utils.get_upper_limit_fluxes(up_data, zp=zp,
                                                                         upmagkey="limiting_mag"),
                                               index=["flux","fluxerr"],
@@ -133,7 +154,7 @@ class Lightcurve(  fritz.FritzPhotometry ):
             fluxes = det_fluxes
 
         # End:
-        alldata = self.get_lcdata(filters=filters, detected=None, **kwargs)
+        alldata = self.get_lcdata(detected=None, **lcprop)
         fluxes["time"] = alldata["mjd"].loc[fluxes.index]
         fluxes["band"] = alldata["filter"].loc[fluxes.index]
         fluxes["zp"]   = zp
@@ -147,6 +168,7 @@ class Lightcurve(  fritz.FritzPhotometry ):
         return fluxes
 
     def fit_salt(self, incl_upperlimit=True, filterprop={},
+                     filters=["ztfr","ztfg","ztfi"],
                  force_color=None, force_x1=None,
                  force_t0=None, force_redshift=None,
                  fixed=None, values=None, bounds=None,
@@ -162,9 +184,15 @@ class Lightcurve(  fritz.FritzPhotometry ):
         incl_upperlimit: [bool] -optional-
             Shall the upper limit be used when fitting salt ?
 
+        filters: [None, str or list of str] -optional-
+            list of filters to be used. 
+            None (or '*') means no filter selection (so all).
+            Careful, filters should be known by sncosmo.
+
         filterprop: [dict or None] -optional-
             kwargs option for get_sncosmo_table() and then get_lcdata()
             
+        
         // fit options
 
         force_redshift, force_color, force_x1, force_t0: [float or None] -optional-
@@ -224,7 +252,8 @@ class Lightcurve(  fritz.FritzPhotometry ):
         model.set(**{**values,**fixed})
         parameters = [p_ for p_ in ['z','t0', 'x0', 'x1', 'c'] if p_ not in fixed]
     
-        table_ = self.get_sncosmo_table(incl_upperlimit=incl_upperlimit, as_astropy=True,
+        table_ = self.get_sncosmo_table(filters=filters,
+                                        incl_upperlimit=incl_upperlimit, as_astropy=True,
                                             **filterprop)
         
         #
@@ -242,6 +271,7 @@ class Lightcurve(  fritz.FritzPhotometry ):
             return (result, fitted_model), table_
 
         return saltres
+    
     # --------- #
     #  Data     #
     # --------- #
@@ -462,10 +492,12 @@ class Lightcurve(  fritz.FritzPhotometry ):
     #  Internal     #
     # ============= #    
     def _build_lcdata_(self, keys=["ra","dec", "mjd", "filter",
-                                   "mag","magerr","magsys","limiting_mag"]):
+                                   "mag","magerr","magsys","limiting_mag",
+                                    "instrument_name"]):
         """ """
         from . import utils
-        lcdata = self.get_data()[keys]
+        lcdata = self.get_data()[keys].copy()
+        lcdata.loc[lcdata.index,"instrument_name"] = lcdata["instrument_name"].str.lower()
         detected_flux = lcdata[~lcdata["mag"].isna()]
         flux,fluxerr = utils.mag_to_flux(*detected_flux[["mag","magerr"]].values.T)
         fdf = pandas.DataFrame(np.asarray([flux,fluxerr, flux/fluxerr]).T, 
@@ -480,7 +512,8 @@ class Lightcurve(  fritz.FritzPhotometry ):
         self.lcdata["phase"] = self.saltresult.get_phase(self.lcdata["mjd"])
 
         bands = self.lcdata[["mjd","filter"]]
-        model = self.saltresult.get_lightcurve(bands["filter"], jd=bands["mjd"], as_phase=True, as_dataframe=True)
+        model = self.saltresult.get_lightcurve(bands["filter"], jd=bands["mjd"],
+                                                   as_phase=True, as_dataframe=True)
         for filter_ in bands["filter"].unique():
             b_index = self.lcdata.index[self.lcdata["filter"]==filter_]
             self.lcdata.loc[b_index, "fluxres"] = self.lcdata.loc[b_index, "flux"]-model.loc[b_index][filter_]
@@ -496,6 +529,22 @@ class Lightcurve(  fritz.FritzPhotometry ):
             
         return self._lcdata
 
+    @property
+    def sncosmo_instruments(self):
+        """ """
+        if not hasattr(self, "_sncosmo_instruments"):
+            self.load_intruments_to_sncosmo()
+            
+        return list(self._sncosmo_instruments.keys())
+
+    @property
+    def sncosmo_filters(self):
+        """ """
+        if not hasattr(self, "_sncosmo_instruments"):
+            self.load_intruments_to_sncosmo()
+
+        return list(np.concatenate( list(self._sncosmo_instruments.values()) ))
+    
     @property
     def saltresult(self):
         """ """

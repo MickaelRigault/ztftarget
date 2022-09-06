@@ -18,6 +18,20 @@ def get_saltmodel( mwebv=None):
         
     return model
 
+def sncosmoresult_to_pandas(result):
+    """ """
+    error = pandas.Series( dict(result.get("errors") ), name="error")
+    values = pandas.Series( result.get("parameters"),
+                                index=result.get("param_names"),
+                                name="value")
+
+    cov = pandas.DataFrame( result.get("covariance"), 
+                                index=error.index, columns="cov_"+error.index)
+
+    fit_res = pandas.concat( [values,error, cov], axis=1)
+    fit_meta = pandas.Series( {k:result.get(k) for k in ["success", "ncall", "chisq", "ndof"]} )
+    fit_meta["chi2dof"] = fit_meta["chisq"]/fit_meta["ndof"]
+    return fit_res, fit_meta
 
 class SALTResult( object ):
 
@@ -67,7 +81,11 @@ class SALTResult( object ):
         
     # ------- #
     # GETTER  # 
-    # ------- #        
+    # ------- #
+    def to_pandas(self):
+        """ """
+        return sncosmoresult_to_pandas(self.sncosmo_result)
+    
     def get_model(self):
         """ Set the model to the parameters and returns it. """
         self.model.set(**self.get_parameters(inclerrors=False, as_serie=False))
@@ -79,9 +97,9 @@ class SALTResult( object ):
     
     def get_parameters(self, inclerrors=True, as_serie=True):
         """ """
-        param_ = {k:v for k,v in zip(self.result.param_names, self.result.parameters)}
+        param_ = {k:v for k,v in zip(self.sncosmo_result.param_names, self.sncosmo_result.parameters)}
         if inclerrors:
-            for k_,v_ in self.result.errors.items():
+            for k_,v_ in self.sncosmo_result.errors.items():
                 param_[f"{k_}_err"] = v_
                 
         if as_serie:
@@ -129,6 +147,16 @@ class SALTResult( object ):
     # ============= #
     @property
     def result(self):
+        """ fitted_result and fitted_meta """
+        return self.to_pandas()[0]
+
+    @property
+    def result_meta(self):
+        """ """
+        return self.to_pandas()[1]
+    
+    @property
+    def sncosmo_result(self):
         """ """
         if not hasattr(self, "_result"):
             return None

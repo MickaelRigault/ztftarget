@@ -409,7 +409,7 @@ class Lightcurve(  fritz.FritzPhotometry ):
                 color = FILTER_PLTFORMAT[band_]["mfc"]
                 axres[band_].plot(datatime, 
                                 bdata["fluxres"]/bdata["fluxerr"],
-                                    marker="o", ls="None", 
+                                    marker=FILTER_PLTFORMAT[band_]["marker"], ls="None", 
                                 ms=FILTER_PLTFORMAT[band_]["ms"]/1.2, 
                                 mfc=color,
                                 mec="0.5"
